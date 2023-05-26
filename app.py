@@ -6,6 +6,7 @@ import environ
 from oauth2client.service_account import ServiceAccountCredentials
 from langchain import OpenAI
 from langchain.agents import create_pandas_dataframe_agent
+from retrying import retry
 
 
 # OpenAPI Key
@@ -29,7 +30,8 @@ st.markdown(f"[{link_text}]({spreadsheet_url})")
 query_list = [
     "Tell me details about the 100th sale.",
     "Which country has the most sales count?",
-    "What is the average unit price of the sales?"
+    "What is the average unit price of the sales?",
+    "Tell me about some interesting facts about the sales data."
 ]
 st.write("Example Queries:")
 st.write("- " + "\n- ".join(query_list))
@@ -56,8 +58,9 @@ data = sheet.get_all_values()
 query = st.text_area("Insert Query")
 
 
-# Submit Query
-if st.button("Submit Query", type="primary"):
+# Retry settings
+@retry(stop_max_attempt_number=3)
+def get_response():
 
     # Create an OpenAI object.
     llm = OpenAI(openai_api_key=API_KEY)
@@ -69,7 +72,18 @@ if st.button("Submit Query", type="primary"):
     agent =  create_pandas_dataframe_agent(llm, df, verbose=True)
 
     # Query the agent.
-    response = agent.run(query)
-    
-    # Write the response to the Streamlit app.
-    st.write(response)
+    return agent.run(query)
+
+
+# Submit Query
+if st.button("Submit Query", type="primary"):
+    try:
+        # Get the response
+        response = get_response()
+
+        # Write the response to the Streamlit app.
+        st.write(response)
+
+    except Exception as e:
+        # Write the exception to the Streamlit app.
+        st.write(f"An error occurred: {e}")
